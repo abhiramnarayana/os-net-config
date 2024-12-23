@@ -921,6 +921,11 @@ def main(argv=sys.argv):
                 autoprobe = pfs[0].get('drivers_autoprobe', True)
             else:
                 autoprobe = True
+
+            if get_numvfs(device_name) == numvfs:
+                logger.info("%s: is already configured", device_name)
+                return
+
             set_drivers_autoprobe(device_name, autoprobe)
             set_numvfs(device_name, int(numvfs), autoprobe)
         else:
