@@ -32,6 +32,34 @@ def generate_random_mac(name):
     return mac_address
 
 
+class TestNormalizeIPv6(base.TestCase):
+    def test_compressed_format(self):
+        self.assertEqual(
+            '2620:cf:cf:aaaa::64',
+            objects.normalize_ipv6('2620:00cf:00cf:aaaa:0000:0000:0000:0064'))
+
+    def test_cidr_format(self):
+        self.assertEqual(
+            '2620:cf:cf:aaaa::64/64',
+            objects.normalize_ipv6(
+                '2620:00cf:00cf:aaaa:0000:0000:0000:0064/64'))
+
+    def test_already_compressed(self):
+        self.assertEqual(
+            '2620:cf:cf:aaaa::64/64',
+            objects.normalize_ipv6('2620:cf:cf:aaaa::64/64'))
+
+    def test_empty_string(self):
+        self.assertEqual('', objects.normalize_ipv6(''))
+
+    def test_none(self):
+        self.assertIsNone(objects.normalize_ipv6(None))
+
+    def test_invalid_address(self):
+        self.assertEqual('not:an:address',
+                         objects.normalize_ipv6('not:an:address'))
+
+
 class TestRoute(base.TestCase):
     def setUp(self):
         super(TestRoute, self).setUp()
@@ -81,6 +109,14 @@ class TestRoute(base.TestCase):
                 'ip_netmask': '172.19.0.0/24'}
         self.assertRaises(objects.InvalidConfigException,
                           objects.Route.from_json, data)
+
+    def test_ipv6_route_normalization(self):
+        data = json.loads(
+            '{"next_hop": "2620:00cf:00cf:aaaa:0000:0000:0000:0001",'
+            ' "ip_netmask": "2620:00cf:00cf:bbbb:0000:0000:0000:0000/64"}')
+        route = objects.Route.from_json(data)
+        self.assertEqual("2620:cf:cf:aaaa::1", route.next_hop)
+        self.assertEqual("2620:cf:cf:bbbb::/64", route.ip_netmask)
 
 
 class TestRouteTable(base.TestCase):
@@ -144,6 +180,14 @@ class TestAddress(base.TestCase):
         self.assertEqual("2001:abc:a::", address.ip)
         self.assertEqual("ffff:ffff:ffff:ffff::", address.netmask)
         self.assertEqual(6, address.version)
+
+    def test_ipv6_address_normalization(self):
+        expanded = objects.Address(
+            '2620:00cf:00cf:aaaa:0000:0000:0000:0064/64')
+        compressed = objects.Address('2620:cf:cf:aaaa::64/64')
+        self.assertEqual(expanded.ip_netmask, compressed.ip_netmask)
+        self.assertEqual('2620:cf:cf:aaaa::64/64', expanded.ip_netmask)
+        self.assertEqual('2620:cf:cf:aaaa::64', expanded.ip)
 
     def test_from_json(self):
         data = '{"ip_netmask": "192.0.2.5/24"}'

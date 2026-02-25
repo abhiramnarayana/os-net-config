@@ -263,6 +263,23 @@ class IfcfgNetConfig(os_net_config.NetConfig):
                 rules.append(line)
         return rules
 
+    @staticmethod
+    def _normalize_ipv6_ifcfg_value(key, value):
+        """Normalize IPv6 addresses in ifcfg values for comparison.
+
+        :param key: The ifcfg key name (e.g. IPV6ADDR, DNS1)
+        :param value: The ifcfg value string
+        :returns: Normalized value string
+        """
+        if key in ('IPV6ADDR', 'IPV6_DEFAULTGW'):
+            return objects.normalize_ipv6(value)
+        if key == 'IPV6ADDR_SECONDARIES':
+            return ' '.join(
+                objects.normalize_ipv6(a) for a in value.split())
+        if key in ('DNS1', 'DNS2') and ':' in value:
+            return objects.normalize_ipv6(value)
+        return value
+
     def enumerate_ifcfg_changes(self, ifcfg_data_old, ifcfg_data_new):
         """Determine which values are added/modified/removed
 
@@ -280,7 +297,11 @@ class IfcfgNetConfig(os_net_config.NetConfig):
                         logger.debug("Ignoring order of list for %s", key)
                         continue
 
-                if ifcfg_data_old[key].upper() != ifcfg_data_new[key].upper():
+                old_val = self._normalize_ipv6_ifcfg_value(
+                    key, ifcfg_data_old[key])
+                new_val = self._normalize_ipv6_ifcfg_value(
+                    key, ifcfg_data_new[key])
+                if old_val.upper() != new_val.upper():
                     changed_values[key] = 'modified'
             else:
                 changed_values[key] = 'removed'

@@ -28,6 +28,23 @@ from os_net_config import common
 from os_net_config import utils
 
 
+def normalize_ipv6(addr_str):
+    """Normalize an IPv6 address or CIDR to its canonical compressed form.
+
+    Handles addresses with or without a prefix length.
+    Returns the original string unchanged if it is not a valid IPv6 address
+    or is an IPv4 address.
+    """
+    if not addr_str or ':' not in addr_str:
+        return addr_str
+    try:
+        if '/' in addr_str:
+            return str(netaddr.IPNetwork(addr_str))
+        return str(netaddr.IPAddress(addr_str))
+    except (netaddr.AddrFormatError, ValueError):
+        return addr_str
+
+
 logger = logging.getLogger(__name__)
 
 _MAPPED_NICS = None
@@ -254,8 +271,8 @@ class Route(object):
 
     def __init__(self, next_hop, ip_netmask="", default=False,
                  route_options="", route_table=None, metric=None):
-        self.next_hop = next_hop
-        self.ip_netmask = ip_netmask
+        self.next_hop = normalize_ipv6(next_hop)
+        self.ip_netmask = normalize_ipv6(ip_netmask) if ip_netmask else ""
         self.default = default
         self.route_options = route_options
         self.route_table = route_table
@@ -293,12 +310,15 @@ class Address(object):
     """Base class for network addresses."""
 
     def __init__(self, ip_netmask):
-        self.ip_netmask = ip_netmask
-        ip_nw = netaddr.IPNetwork(self.ip_netmask)
+        ip_nw = netaddr.IPNetwork(ip_netmask)
         self.ip = str(ip_nw.ip)
         self.netmask = str(ip_nw.netmask)
         self.prefixlen = ip_nw.prefixlen
         self.version = ip_nw.version
+        if self.version == 6:
+            self.ip_netmask = '%s/%s' % (self.ip, self.prefixlen)
+        else:
+            self.ip_netmask = ip_netmask
 
     @staticmethod
     def from_json(json):
@@ -428,7 +448,7 @@ class _BaseOpts(object):
         self.primary = primary
         self.defroute = defroute
         self.dhclient_args = dhclient_args
-        self.dns_servers = dns_servers
+        self.dns_servers = [normalize_ipv6(s) for s in dns_servers]
         self.domain = domain
         self.nm_controlled = nm_controlled
         self.onboot = onboot
